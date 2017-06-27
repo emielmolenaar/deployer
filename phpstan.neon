@@ -1,0 +1,3 @@
+parameters:
+    ignoreErrors:
+        - '#Function token not found#'

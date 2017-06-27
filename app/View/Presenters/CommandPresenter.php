@@ -2,9 +2,7 @@
 
 namespace REBELinBLUE\Deployer\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
 use REBELinBLUE\Deployer\Command;
-use Robbo\Presenter\Presenter;
 
 /**
  * The view presenter for a command class.
@@ -118,7 +116,7 @@ class CommandPresenter extends Presenter
     {
         $commands = [];
 
-        foreach ($this->getObject()->commands as $command) {
+        foreach ($this->getWrappedObject()->commands as $command) {
             if ($command->step === $stage) {
                 $commands[] = $command->name;
             }
@@ -128,6 +126,6 @@ class CommandPresenter extends Presenter
             return implode(', ', $commands);
         }
 
-        return Lang::get('app.none');
+        return $this->translator->trans('app.none');
     }
 }

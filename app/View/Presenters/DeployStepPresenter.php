@@ -2,9 +2,7 @@
 
 namespace REBELinBLUE\Deployer\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
 use REBELinBLUE\Deployer\Command;
-use Robbo\Presenter\Presenter;
 
 /**
  * The view presenter for a deploy step class.
@@ -21,13 +19,13 @@ class DeployStepPresenter extends Presenter
         if (!is_null($this->command_id)) {
             return $this->command->name;
         } elseif ($this->stage === Command::DO_INSTALL) {
-            return Lang::get('commands.install');
+            return $this->translator->trans('commands.install');
         } elseif ($this->stage === Command::DO_ACTIVATE) {
-            return Lang::get('commands.activate');
+            return $this->translator->trans('commands.activate');
         } elseif ($this->stage === Command::DO_PURGE) {
-            return Lang::get('commands.purge');
+            return $this->translator->trans('commands.purge');
         }
 
-        return Lang::get('commands.clone');
+        return $this->translator->trans('commands.clone');
     }
 }

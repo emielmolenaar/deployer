@@ -2,7 +2,7 @@
 
 namespace REBELinBLUE\Deployer\Tests\Unit\View\Presenters;
 
-use Lang;
+use Illuminate\Contracts\Translation\Translator;
 use Mockery as m;
 use REBELinBLUE\Deployer\Command;
 use REBELinBLUE\Deployer\Project;
@@ -14,6 +14,15 @@ use REBELinBLUE\Deployer\View\Presenters\CommandPresenter;
  */
 class CommandPresenterTest extends TestCase
 {
+    private $translator;
+
+    public function setUp()
+    {
+        parent::setUp();
+
+        $this->translator = m::mock(Translator::class);
+    }
+
     /**
      * @dataProvider provideMethods
      * @covers ::presentBeforeClone
@@ -31,11 +40,12 @@ class CommandPresenterTest extends TestCase
         $expected = 'app.none';
 
         $project = m::mock(Project::class);
-        $project->shouldReceive('getAttribute')->atLeast()->times(1)->with('commands')->andReturn([]);
+        $project->shouldReceive('getAttribute')->atLeast()->once()->with('commands')->andReturn([]);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new CommandPresenter($project);
+        $presenter = new CommandPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->{$method}();
 
         $this->assertSame($expected, $actual, $method . ' did not translate');
@@ -63,9 +73,10 @@ class CommandPresenterTest extends TestCase
         $commands = collect($collection);
 
         $project = m::mock(Project::class);
-        $project->shouldReceive('getAttribute')->atLeast()->times(1)->with('commands')->andReturn($commands);
+        $project->shouldReceive('getAttribute')->atLeast()->once()->with('commands')->andReturn($commands);
 
-        $presenter = new CommandPresenter($project);
+        $presenter = new CommandPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->{$method}();
 
         $this->assertSame($expected, $actual, $method . ' did not return expected names');
@@ -110,7 +121,7 @@ class CommandPresenterTest extends TestCase
     private function mockCommand($name, $step)
     {
         $command = m::mock(Command::class);
-        $command->shouldReceive('getAttribute')->atLeast()->times(1)->with('step')->andReturn($step);
+        $command->shouldReceive('getAttribute')->atLeast()->once()->with('step')->andReturn($step);
         $command->shouldReceive('getAttribute')->with('name')->andReturn($name);
 
         return $command;

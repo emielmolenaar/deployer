@@ -6,7 +6,8 @@ use Symfony\Component\Console\Question\Question;
 
 /**
  * A trait to add validation to console questions.
- **/
+ * @todo Split into package
+ */
 trait AskAndValidate
 {
     /**
@@ -26,9 +27,7 @@ trait AskAndValidate
 
         if ($secret) {
             $question->setHidden(true);
-        }
-
-        if (count($choices)) {
+        } else {
             $question->setAutocompleterValues($choices);
         }
 

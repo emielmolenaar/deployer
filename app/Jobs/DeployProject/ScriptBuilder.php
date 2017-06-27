@@ -28,6 +28,26 @@ class ScriptBuilder
     private $process;
 
     /**
+     * @var Deployment
+     */
+    private $deployment;
+
+    /**
+     * @var string
+     */
+    private $private_key;
+
+    /**
+     * @var string
+     */
+    private $release_archive;
+
+    /**
+     * @var DeployStep
+     */
+    private $step;
+
+    /**
      * ScriptBuilder constructor.
      *
      * @param Process      $process
@@ -70,7 +90,7 @@ class ScriptBuilder
             throw new Exception('Setup has not been called');
         }
 
-        $tokens = $this->getTokens($server, $this->deployment, $this->step, $this->release_archive);
+        $tokens = $this->getTokens($server);
 
         $user = $server->user;
         if ($this->step->isCustom()) {

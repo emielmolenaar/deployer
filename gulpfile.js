@@ -87,6 +87,7 @@ Elixir(function(mix) {
         'projects.js',
         'templates.js',
         'servers.js',
+        'serverTemplates.js',
         'heartbeats.js',
         'notifications.js',
         'shareFiles.js',
@@ -110,5 +111,5 @@ Elixir(function(mix) {
         'public/js/ie.js',
         'public/js/vendor.js'
     ])
-    .copy('public/fonts', 'public/build/fonts');;
+    .copy('public/fonts', 'public/build/fonts');
 });

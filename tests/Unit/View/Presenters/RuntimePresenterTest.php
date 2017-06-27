@@ -2,19 +2,28 @@
 
 namespace REBELinBLUE\Deployer\Tests\Unit\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
+use Illuminate\Contracts\Translation\Translator;
 use Mockery as m;
 use REBELinBLUE\Deployer\Tests\TestCase;
 use REBELinBLUE\Deployer\Tests\Unit\stubs\Model as StubModel;
 use REBELinBLUE\Deployer\Tests\Unit\stubs\Presenter as StubPresenter;
+use REBELinBLUE\Deployer\User;
 use RuntimeException;
-use stdClass;
 
 /**
  * @coversDefaultClass \REBELinBLUE\Deployer\View\Presenters\RuntimePresenter
  */
 class RuntimePresenterTest extends TestCase
 {
+    private $translator;
+
+    public function setUp()
+    {
+        parent::setUp();
+
+        $this->translator = m::mock(Translator::class);
+    }
+
     /**
      * @covers ::presentReadableRuntime
      */
@@ -22,8 +31,11 @@ class RuntimePresenterTest extends TestCase
     {
         $this->expectException(RuntimeException::class);
 
+        $invalid = new User();
+
         // Class which doesn't implement the RuntimeInterface
-        $presenter = new StubPresenter(new stdClass());
+        $presenter = new StubPresenter($this->translator);
+        $presenter->getWrappedObject($invalid);
         $presenter->presentReadableRuntime();
     }
 
@@ -42,10 +54,14 @@ class RuntimePresenterTest extends TestCase
             $time        = $runtime === 0 ? 0 : 1;
             $translation = 'deployments.' . $key;
 
-            Lang::shouldReceive('choice')->once()->with($translation, $time, ['time' => $time])->andReturn($key);
+            $this->translator->shouldReceive('choice')
+                             ->once()
+                             ->with($translation, $time, ['time' => $time])
+                             ->andReturn($key);
         }
 
-        $presenter = new StubPresenter($model);
+        $presenter = new StubPresenter($this->translator);
+        $presenter->setWrappedObject($model);
         $actual    = $presenter->presentReadableRuntime();
 
         $this->assertSame($expected, $actual);
@@ -67,9 +83,10 @@ class RuntimePresenterTest extends TestCase
         $model = m::mock(StubModel::class);
         $model->shouldReceive('runtime')->once()->andReturn($runtime);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new StubPresenter($model);
+        $presenter = new StubPresenter($this->translator);
+        $presenter->setWrappedObject($model);
         $actual    = $presenter->presentReadableRuntime();
 
         $this->assertSame($expected, $actual);

@@ -2,7 +2,7 @@
 
 namespace REBELinBLUE\Deployer\Tests\Unit\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
+use Illuminate\Contracts\Translation\Translator;
 use Mockery as m;
 use REBELinBLUE\Deployer\Project;
 use REBELinBLUE\Deployer\Tests\TestCase;
@@ -13,6 +13,15 @@ use REBELinBLUE\Deployer\View\Presenters\ProjectPresenter;
  */
 class ProjectPresenterTest extends TestCase
 {
+    private $translator;
+
+    public function setUp()
+    {
+        parent::setUp();
+
+        $this->translator = m::mock(Translator::class);
+    }
+
     /**
      * @dataProvider provideCCTrayStatus
      * @covers ::presentCcTrayStatus
@@ -21,7 +30,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithStatus($status);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentCcTrayStatus();
 
         $this->assertSame($expected, $actual);
@@ -40,9 +50,10 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithStatus($status);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentReadableStatus();
 
         $this->assertSame($expected, $actual);
@@ -61,7 +72,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithStatus($status);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentIcon();
 
         $this->assertSame($expected, $actual);
@@ -80,7 +92,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithStatus($status);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentCssClass();
 
         $this->assertSame($expected, $actual);
@@ -101,9 +114,10 @@ class ProjectPresenterTest extends TestCase
 
         $project = $this->mockProjectWithHealthStatus(0, 0);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentAppStatus();
 
         $this->assertSame($expected, $actual);
@@ -118,7 +132,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithHealthStatus($length, $missed);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentAppStatus();
 
         $this->assertSame($expected, $actual);
@@ -138,7 +153,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithHealthStatus($length, $missed);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentAppStatusCss();
 
         $this->assertSame($expected, $actual);
@@ -159,9 +175,10 @@ class ProjectPresenterTest extends TestCase
 
         $project = $this->mockProjectWithHealthStatus(0, 0, 'heartbeatsStatus');
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentHeartBeatStatus();
 
         $this->assertSame($expected, $actual);
@@ -176,7 +193,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithHealthStatus($length, $missed, 'heartbeatsStatus');
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentHeartBeatStatus();
 
         $this->assertSame($expected, $actual);
@@ -196,7 +214,8 @@ class ProjectPresenterTest extends TestCase
     {
         $project = $this->mockProjectWithHealthStatus($length, $missed, 'heartbeatsStatus');
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentHeartBeatStatusCss();
 
         $this->assertSame($expected, $actual);
@@ -217,7 +236,8 @@ class ProjectPresenterTest extends TestCase
         $project = m::mock(Project::class);
         $project->shouldReceive('accessDetails')->andReturnNull();
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentTypeIcon();
 
         $this->assertSame($expected, $actual);
@@ -232,7 +252,8 @@ class ProjectPresenterTest extends TestCase
         $project = m::mock(Project::class);
         $project->shouldReceive('accessDetails')->andReturn(['domain' => $repository]);
 
-        $presenter = new ProjectPresenter($project);
+        $presenter = new ProjectPresenter($this->translator);
+        $presenter->setWrappedObject($project);
         $actual    = $presenter->presentTypeIcon();
 
         $this->assertSame($expected, $actual);
@@ -246,7 +267,7 @@ class ProjectPresenterTest extends TestCase
     private function mockProjectWithStatus($status)
     {
         $project = m::mock(Project::class);
-        $project->shouldReceive('getAttribute')->atLeast()->times(1)->with('status')->andReturn($status);
+        $project->shouldReceive('getAttribute')->atLeast()->once()->with('status')->andReturn($status);
 
         return $project;
     }

@@ -2,14 +2,14 @@
 
 namespace REBELinBLUE\Deployer\Http\Controllers;
 
+use Illuminate\Contracts\Auth\Guard;
 use Illuminate\Contracts\Events\Dispatcher;
 use Illuminate\Contracts\Routing\UrlGenerator;
 use Illuminate\Contracts\Translation\Translator;
 use Illuminate\Contracts\View\Factory as ViewFactory;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Redirector;
-use Illuminate\Support\Facades\Auth;
-use Intervention\Image\Facades\Image;
+use Intervention\Image\ImageManager;
 use MicheleAngioni\MultiLanguage\LanguageManager;
 use PragmaRX\Google2FA\Contracts\Google2FA as Google2FA;
 use REBELinBLUE\Deployer\Events\EmailChangeRequested;
@@ -34,16 +34,6 @@ class ProfileController extends Controller
     private $google2fa;
 
     /**
-     * @var LanguageManager
-     */
-    private $languageManager;
-
-    /**
-     * @var Settings
-     */
-    private $settings;
-
-    /**
      * @var ViewFactory
      */
     private $view;
@@ -59,32 +49,34 @@ class ProfileController extends Controller
     private $redirect;
 
     /**
+     * @var Guard
+     */
+    private $auth;
+
+    /**
      * ProfileController constructor.
      *
      * @param UserRepositoryInterface $repository
      * @param Google2FA               $google2fa
-     * @param LanguageManager         $languageManager
-     * @param Settings                $settings
      * @param ViewFactory             $view
      * @param Translator              $translator
      * @param Redirector              $redirector
+     * @param Guard                   $auth
      */
     public function __construct(
         UserRepositoryInterface $repository,
         Google2FA $google2fa,
-        LanguageManager $languageManager,
-        Settings $settings,
         ViewFactory $view,
         Translator $translator,
-        Redirector $redirector
+        Redirector $redirector,
+        Guard $auth
     ) {
         $this->repository      = $repository;
         $this->google2fa       = $google2fa;
-        $this->languageManager = $languageManager;
-        $this->settings        = $settings;
         $this->view            = $view;
         $this->translator      = $translator;
         $this->redirect        = $redirector;
+        $this->auth            = $auth;
     }
 
     /**
@@ -92,11 +84,13 @@ class ProfileController extends Controller
      *
      * @param Request $request
      *
+     * @param  LanguageManager       $languageManager
+     * @param  Settings              $settings
      * @return \Illuminate\View\View
      */
-    public function index(Request $request)
+    public function index(Request $request, LanguageManager $languageManager, Settings $settings)
     {
-        $user = Auth::user();
+        $user = $this->auth->user();
 
         $code = $this->google2fa->generateSecretKey();
         if ($user->has_two_factor_authentication || $request->old('google_code')) {
@@ -109,8 +103,8 @@ class ProfileController extends Controller
             'google_2fa_url'  => $img,
             'google_2fa_code' => $code,
             'title'           => $this->translator->trans('users.update_profile'),
-            'locales'         => $this->languageManager->getAvailableLanguages(),
-            'settings'        => $this->settings,
+            'locales'         => $languageManager->getAvailableLanguages(),
+            'settings'        => $settings,
         ]);
     }
 
@@ -126,7 +120,7 @@ class ProfileController extends Controller
         $this->repository->updateById($request->only(
             'name',
             'password'
-        ), Auth::user()->id);
+        ), $this->auth->id());
 
         return $this->redirect->to('/');
     }
@@ -144,7 +138,7 @@ class ProfileController extends Controller
             'skin',
             'scheme',
             'language'
-        ), Auth::user()->id);
+        ), $this->auth->id());
 
         return $this->redirect->to('/');
     }
@@ -157,7 +151,7 @@ class ProfileController extends Controller
      */
     public function requestEmail(Dispatcher $dispatcher)
     {
-        $dispatcher->dispatch(new EmailChangeRequested(Auth::user()));
+        $dispatcher->dispatch(new EmailChangeRequested($this->auth->user()));
 
         return 'success';
     }
@@ -236,7 +230,7 @@ class ProfileController extends Controller
      */
     public function gravatar()
     {
-        $user         = Auth::user();
+        $user         = $this->auth->user();
         $user->avatar = null;
         $user->save();
 
@@ -249,15 +243,16 @@ class ProfileController extends Controller
     /**
      * Set and crop the avatar.
      *
-     * @param Request $request
+     * @param Request      $request
+     * @param UrlGenerator $url
+     * @param ImageManager $image
      *
-     * @param  UrlGenerator $url
      * @return array
      */
-    public function avatar(Request $request, UrlGenerator $url)
+    public function avatar(Request $request, UrlGenerator $url, ImageManager $image)
     {
         $path   = $request->get('path', '/placeholder.jpg');
-        $image  = Image::make(public_path() . $path);
+        $image  = $image->make(public_path() . $path);
         $rotate = $request->get('dataRotate');
 
         if ($rotate) {
@@ -274,7 +269,7 @@ class ProfileController extends Controller
 
         $image->save(public_path() . $path);
 
-        $user         = Auth::user();
+        $user         = $this->auth->user();
         $user->avatar = $path;
         $user->save();
 
@@ -306,7 +301,7 @@ class ProfileController extends Controller
             }
         }
 
-        $user                   = Auth::user();
+        $user                   = $this->auth->user();
         $user->google2fa_secret = $secret;
         $user->save();
 

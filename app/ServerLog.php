@@ -3,16 +3,14 @@
 namespace REBELinBLUE\Deployer;
 
 use Illuminate\Database\Eloquent\Model;
-use REBELinBLUE\Deployer\Events\ServerLogChanged;
-use REBELinBLUE\Deployer\Events\ServerOutputChanged;
+use McCool\LaravelAutoPresenter\HasPresenter;
 use REBELinBLUE\Deployer\View\Presenters\RuntimeInterface;
 use REBELinBLUE\Deployer\View\Presenters\ServerLogPresenter;
-use Robbo\Presenter\PresentableInterface;
 
 /**
  * Server log model.
  */
-class ServerLog extends Model implements PresentableInterface, RuntimeInterface
+class ServerLog extends Model implements HasPresenter, RuntimeInterface
 {
     const COMPLETED = 0;
     const PENDING   = 1;
@@ -47,24 +45,6 @@ class ServerLog extends Model implements PresentableInterface, RuntimeInterface
     protected $dates = ['started_at', 'finished_at'];
 
     /**
-     * Override the boot method to bind model event listeners.
-     */
-    public static function boot()
-    {
-        parent::boot();
-
-        static::updated(function (ServerLog $model) {
-            $outputChanged = $model->isDirty('output');
-
-            event(new ServerLogChanged($model));
-
-            if ($outputChanged) {
-                event(new ServerOutputChanged($model));
-            }
-        });
-    }
-
-    /**
      * Belongs to association.
      *
      * @return \Illuminate\Database\Eloquent\Relations\BelongsTo
@@ -91,10 +71,10 @@ class ServerLog extends Model implements PresentableInterface, RuntimeInterface
     /**
      * Gets the view presenter.
      *
-     * @return ServerLogPresenter
+     * @return string
      */
-    public function getPresenter()
+    public function getPresenterClass()
     {
-        return new ServerLogPresenter($this);
+        return ServerLogPresenter::class;
     }
 }

@@ -5,15 +5,15 @@ namespace REBELinBLUE\Deployer;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use McCool\LaravelAutoPresenter\HasPresenter;
 use REBELinBLUE\Deployer\Events\ModelChanged;
 use REBELinBLUE\Deployer\View\Presenters\DeploymentPresenter;
 use REBELinBLUE\Deployer\View\Presenters\RuntimeInterface;
-use Robbo\Presenter\PresentableInterface;
 
 /**
  * Deployment model.
  */
-class Deployment extends Model implements PresentableInterface, RuntimeInterface
+class Deployment extends Model implements HasPresenter, RuntimeInterface
 {
     use SoftDeletes;
 
@@ -78,6 +78,7 @@ class Deployment extends Model implements PresentableInterface, RuntimeInterface
     {
         parent::boot();
 
+        // FIXME: Change to use the trait
         static::saved(function (Deployment $model) {
             event(new ModelChanged($model, 'deployment'));
         });
@@ -206,8 +207,10 @@ class Deployment extends Model implements PresentableInterface, RuntimeInterface
                                                               ->first();
         }
 
-        if (isset(self::$currentDeployment[$this->project_id])) {
-            return (self::$currentDeployment[$this->project_id]->id === $this->id);
+        if (isset(self::$currentDeployment[$this->project_id]) &&
+            self::$currentDeployment[$this->project_id]->id === $this->id
+        ) {
+            return true;
         }
 
         return false;
@@ -278,11 +281,11 @@ class Deployment extends Model implements PresentableInterface, RuntimeInterface
     /**
      * Gets the view presenter.
      *
-     * @return DeploymentPresenter
+     * @return string
      */
-    public function getPresenter()
+    public function getPresenterClass()
     {
-        return new DeploymentPresenter($this);
+        return DeploymentPresenter::class;
     }
 
     /**
@@ -308,7 +311,13 @@ class Deployment extends Model implements PresentableInterface, RuntimeInterface
             return $this->source;
         }
 
-        return $this->getPresenter()->committer_name;
+        // FIXME: This is horrible
+        $presenter = $this->getPresenterClass();
+
+        /** @var DeploymentPresenter $presenter */
+        $presenter = new $presenter(app('translator'));
+
+        return $presenter->setWrappedObject($this)->committer_name;
     }
 
     /**

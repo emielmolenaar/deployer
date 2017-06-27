@@ -2,10 +2,8 @@
 
 namespace REBELinBLUE\Deployer\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
 use REBELinBLUE\Deployer\Command;
 use REBELinBLUE\Deployer\Deployment;
-use Robbo\Presenter\Presenter;
 
 /**
  * The view presenter for a project class.
@@ -39,20 +37,20 @@ class DeploymentPresenter extends Presenter
     public function presentReadableStatus()
     {
         if ($this->status === Deployment::COMPLETED) {
-            return Lang::get('deployments.completed');
+            return $this->translator->trans('deployments.completed');
         } elseif ($this->status === Deployment::COMPLETED_WITH_ERRORS) {
-            return Lang::get('deployments.completed_with_errors');
+            return $this->translator->trans('deployments.completed_with_errors');
         } elseif ($this->status === Deployment::ABORTING) {
-            return Lang::get('deployments.aborting');
+            return $this->translator->trans('deployments.aborting');
         } elseif ($this->status === Deployment::ABORTED) {
-            return Lang::get('deployments.aborted');
+            return $this->translator->trans('deployments.aborted');
         } elseif ($this->status === Deployment::FAILED) {
-            return Lang::get('deployments.failed');
+            return $this->translator->trans('deployments.failed');
         } elseif ($this->status === Deployment::DEPLOYING) {
-            return Lang::get('deployments.deploying');
+            return $this->translator->trans('deployments.deploying');
         }
 
-        return Lang::get('deployments.pending');
+        return $this->translator->trans('deployments.pending');
     }
 
     /**
@@ -62,7 +60,7 @@ class DeploymentPresenter extends Presenter
      */
     public function presentOptionalCommandsUsed()
     {
-        return $this->getObject()->commands->filter(function (Command $command) {
+        return $this->getWrappedObject()->commands->filter(function (Command $command) {
             return $command->optional;
         })->implode('id', ',');
     }
@@ -133,10 +131,10 @@ class DeploymentPresenter extends Presenter
     {
         if ($this->committer === Deployment::LOADING) {
             if ($this->status === Deployment::FAILED) {
-                return Lang::get('deployments.unknown');
+                return $this->translator->trans('deployments.unknown');
             }
 
-            return Lang::get('deployments.loading');
+            return $this->translator->trans('deployments.loading');
         }
 
         return $this->committer;
@@ -151,10 +149,10 @@ class DeploymentPresenter extends Presenter
     {
         if ($this->short_commit === Deployment::LOADING) {
             if ($this->status === Deployment::FAILED) {
-                return Lang::get('deployments.unknown');
+                return $this->translator->trans('deployments.unknown');
             }
 
-            return Lang::get('deployments.loading');
+            return $this->translator->trans('deployments.loading');
         }
 
         return $this->short_commit;

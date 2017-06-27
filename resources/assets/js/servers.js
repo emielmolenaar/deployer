@@ -185,6 +185,14 @@ var app = app || {};
         });
     });
 
+    $('#server [data-server-template-id]').on('click', function () {
+        var server_template_id = $(this).data('server-template-id');
+        var server_template = app.ServerTemplates.get(server_template_id);
+        $('#server_name').val(server_template.get('name'));
+        $('#server_address').val(server_template.get('ip_address'));
+        $('#server_port').val(server_template.get('port'));
+        $('.nav-tabs a[href="#server_details"]').tab('show');
+    });
 
     app.Server = Backbone.Model.extend({
         urlRoot: '/servers'
@@ -270,7 +278,8 @@ var app = app || {};
         tagName:  'tr',
         events: {
             'click .btn-test': 'testConnection',
-            'click .btn-edit': 'editServer'
+            'click .btn-edit': 'editServer',
+            'click .btn-view': 'viewLog'
         },
         initialize: function () {
             this.listenTo(this.model, 'change', this.render);
@@ -284,6 +293,7 @@ var app = app || {};
             data.status_css = 'primary';
             data.icon_css   = 'question';
             data.status     = Lang.get('servers.untested');
+            data.has_log    = false;
 
             if (parseInt(this.model.get('status')) === SUCCESSFUL) {
                 data.status_css = 'success';
@@ -297,6 +307,7 @@ var app = app || {};
                 data.status_css = 'danger';
                 data.icon_css   = 'warning';
                 data.status     = Lang.get('servers.failed');
+                data.has_log    = data.connect_log ? true : false;
             }
 
             this.$el.html(this.template(data));
@@ -313,6 +324,13 @@ var app = app || {};
             $('#server_path').val(this.model.get('path'));
 
             $('#server_deploy_code').prop('checked', (this.model.get('deploy_code') === true));
+        },
+        viewLog: function() {
+            var modal = $('div.modal#result');
+            var title = Lang.get('servers.log_title');
+
+            modal.find('pre').html(parseOutput(this.model.get('connect_log')));
+            modal.find('.modal-title span').text(title);
         },
         testConnection: function() {
             if (parseInt(this.model.get('status')) === TESTING) {

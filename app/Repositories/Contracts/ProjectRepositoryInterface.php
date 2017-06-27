@@ -68,11 +68,11 @@ interface ProjectRepositoryInterface
     public function updateStatusAll($original, $updated);
 
     /**
-     * @param Carbon $last_mirrored_since
-     * @param $count
+     * @param Carbon   $last_mirrored_since
+     * @param int      $count
      * @param callable $callback
      *
-     * @return Collection
+     * @return \Illuminate\Database\Eloquent\Collection
      */
     public function getLastMirroredBefore(Carbon $last_mirrored_since, $count, callable $callback);
 }

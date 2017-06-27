@@ -3,10 +3,13 @@
 namespace REBELinBLUE\Deployer\Tests\Integration\Admin;
 
 use Illuminate\Foundation\Testing\DatabaseMigrations;
+use Mockery as m;
 use REBELinBLUE\Deployer\Project;
 use REBELinBLUE\Deployer\Repositories\Contracts\GroupRepositoryInterface;
 use REBELinBLUE\Deployer\Repositories\Contracts\ProjectRepositoryInterface;
 use REBELinBLUE\Deployer\Repositories\Contracts\TemplateRepositoryInterface;
+use REBELinBLUE\Deployer\Services\Filesystem\Filesystem;
+use REBELinBLUE\Deployer\Services\Scripts\Runner as Process;
 use REBELinBLUE\Deployer\Tests\Integration\AuthenticatedTestCase;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -29,7 +32,7 @@ class ProjectControllerTest extends AuthenticatedTestCase
         $response->assertStatus(Response::HTTP_OK)
                  ->assertViewHas(['is_secure', 'title', 'templates', 'groups', 'projects']);
 
-        /** @var \Robbo\Presenter\View\View $view */
+        /** @var \McCool\LaravelAutoPresenter\BasePresenter $view */
         $view      = $response->getOriginalContent();
         $projects  = $this->app->make(ProjectRepositoryInterface::class)->getAll();
         $templates = $this->app->make(TemplateRepositoryInterface::class)->getAll();
@@ -60,6 +63,22 @@ class ProjectControllerTest extends AuthenticatedTestCase
             'include_dev'        => false,
             'template_id'        => '',
         ];
+
+        /** @var Process $process */
+        $process = m::mock(Process::class);
+        $process->shouldReceive('setScript->run');
+        $process->shouldReceive('isSuccessful')->andReturn(true);
+
+        /** @var Filesystem $filesystem */
+        $filesystem = m::mock(Filesystem::class);
+        $filesystem->shouldReceive('tempnam')->andReturn('a-key-file');
+        $filesystem->shouldReceive('get')->with('a-key-file')->andReturn('private-key');
+        $filesystem->shouldReceive('get')->with('a-key-file.pub')->andReturn('private-key');
+        $filesystem->shouldReceive('delete');
+
+        // Override the dependencies from the job so that it doesn't actually run a process
+        $this->app->instance(Process::class, $process);
+        $this->app->instance(Filesystem::class, $filesystem);
 
         $output = array_merge([
             'id' => 1,

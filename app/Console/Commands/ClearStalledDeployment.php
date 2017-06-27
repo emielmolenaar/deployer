@@ -3,7 +3,6 @@
 namespace REBELinBLUE\Deployer\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\App;
 use REBELinBLUE\Deployer\Deployment;
 use REBELinBLUE\Deployer\Project;
 use REBELinBLUE\Deployer\Repositories\Contracts\DeploymentRepositoryInterface;
@@ -82,7 +81,7 @@ class ClearStalledDeployment extends Command
                 'Switch to maintenance mode now? The app will switch ' .
                 'back to live mode once cleanup is finished'
             )) {
-                return;
+                return -1;
             }
 
             $bring_back_up = true;

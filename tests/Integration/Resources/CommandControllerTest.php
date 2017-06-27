@@ -38,7 +38,7 @@ class CommandControllerTest extends AuthenticatedTestCase
                  ->assertViewHas('target_id', 1)
                  ->assertViewHas('action', $action);
 
-        /** @var \Robbo\Presenter\View\View $view */
+        /** @var \McCool\LaravelAutoPresenter\BasePresenter $view */
         $view     = $response->getOriginalContent();
         $commands = $this->app->make(CommandRepositoryInterface::class)->getForDeployStep(1, 'project', $action);
 
@@ -178,7 +178,7 @@ class CommandControllerTest extends AuthenticatedTestCase
         factory(Command::class)->create(array_merge(['name' => 'Foo', 'order' => 2], $target));
         factory(Command::class)->create(array_merge(['name' => 'Bar', 'order' => 1], $target));
 
-        $response = $this->postJson('/projects/1/commands/reorder', ['commands' => [3, 1, 2]]);
+        $response = $this->postJson('/commands/reorder', ['commands' => [3, 1, 2]]);
 
         $response->assertStatus(Response::HTTP_OK)->assertExactJson(['success' => true]);
         $this->assertDatabaseHas('commands', ['id' => 3, 'name' => 'Bar', 'order' => 0]);

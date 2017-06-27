@@ -2,20 +2,29 @@
 
 namespace REBELinBLUE\Deployer\Tests\Unit\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
+use Illuminate\Contracts\Translation\Translator;
 use Mockery as m;
 use REBELinBLUE\Deployer\Command;
 use REBELinBLUE\Deployer\Deployment;
 use REBELinBLUE\Deployer\Tests\TestCase;
+use REBELinBLUE\Deployer\User;
 use REBELinBLUE\Deployer\View\Presenters\DeploymentPresenter;
 use RuntimeException;
-use stdClass;
 
 /**
  * @coversDefaultClass \REBELinBLUE\Deployer\View\Presenters\DeploymentPresenter
  */
 class DeploymentPresenterTest extends TestCase
 {
+    private $translator;
+
+    public function setUp()
+    {
+        parent::setUp();
+
+        $this->translator = m::mock(Translator::class);
+    }
+
     /**
      * @covers ::presentReadableRuntime
      */
@@ -23,8 +32,11 @@ class DeploymentPresenterTest extends TestCase
     {
         $this->expectException(RuntimeException::class);
 
+        $invalid = new User();
+
         // Class which doesn't implement the RuntimeInterface
-        $presenter = new DeploymentPresenter(new stdClass());
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($invalid);
         $presenter->presentReadableRuntime();
     }
 
@@ -36,7 +48,8 @@ class DeploymentPresenterTest extends TestCase
     {
         $deployment = $this->mockDeploymentWithStatus($status);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentCcTrayStatus();
 
         $this->assertSame($expected, $actual);
@@ -55,9 +68,10 @@ class DeploymentPresenterTest extends TestCase
     {
         $deployment = $this->mockDeploymentWithStatus($status);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentReadableStatus();
 
         $this->assertSame($expected, $actual);
@@ -76,7 +90,8 @@ class DeploymentPresenterTest extends TestCase
     {
         $deployment = $this->mockDeploymentWithStatus($status);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentIcon();
 
         $this->assertSame($expected, $actual);
@@ -95,7 +110,8 @@ class DeploymentPresenterTest extends TestCase
     {
         $deployment = $this->mockDeploymentWithStatus($status);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentCssClass();
 
         $this->assertSame($expected, $actual);
@@ -114,7 +130,8 @@ class DeploymentPresenterTest extends TestCase
     {
         $deployment = $this->mockDeploymentWithStatus($status);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentTimelineCssClass();
 
         $this->assertSame($expected, $actual);
@@ -133,9 +150,10 @@ class DeploymentPresenterTest extends TestCase
         $expected = 'a-real-name';
 
         $deployment = m::mock(Deployment::class);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('committer')->andReturn($expected);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('committer')->andReturn($expected);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentCommitterName();
 
         $this->assertSame($expected, $actual);
@@ -148,12 +166,13 @@ class DeploymentPresenterTest extends TestCase
     public function testPresentCommitterNameReturnsTranslation($committer, $status, $expected)
     {
         $deployment = m::mock(Deployment::class);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('committer')->andReturn($committer);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('status')->andReturn($status);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('committer')->andReturn($committer);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('status')->andReturn($status);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentCommitterName();
 
         $this->assertSame($expected, $actual);
@@ -172,9 +191,10 @@ class DeploymentPresenterTest extends TestCase
         $expected = 'abcdedf';
 
         $deployment = m::mock(Deployment::class);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('short_commit')->andReturn($expected);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('short_commit')->andReturn($expected);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentShortCommitHash();
 
         $this->assertSame($expected, $actual);
@@ -187,12 +207,13 @@ class DeploymentPresenterTest extends TestCase
     public function testPresentShortCommitHashReturnsTranslation($commit, $status, $expected)
     {
         $deployment = m::mock(Deployment::class);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('short_commit')->andReturn($commit);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('status')->andReturn($status);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('short_commit')->andReturn($commit);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('status')->andReturn($status);
 
-        Lang::shouldReceive('get')->once()->with($expected)->andReturn($expected);
+        $this->translator->shouldReceive('trans')->once()->with($expected)->andReturn($expected);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentShortCommitHash();
 
         $this->assertSame($expected, $actual);
@@ -218,7 +239,8 @@ class DeploymentPresenterTest extends TestCase
         $deployment = m::mock(Deployment::class);
         $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('commands')->andReturn($commands);
 
-        $presenter = new DeploymentPresenter($deployment);
+        $presenter = new DeploymentPresenter($this->translator);
+        $presenter->setWrappedObject($deployment);
         $actual    = $presenter->presentOptionalCommandsUsed();
 
         $this->assertSame($expected, $actual);
@@ -232,7 +254,7 @@ class DeploymentPresenterTest extends TestCase
     private function mockDeploymentWithStatus($status)
     {
         $deployment = m::mock(Deployment::class);
-        $deployment->shouldReceive('getAttribute')->atLeast()->times(1)->with('status')->andReturn($status);
+        $deployment->shouldReceive('getAttribute')->atLeast()->once()->with('status')->andReturn($status);
 
         return $deployment;
     }
@@ -240,11 +262,11 @@ class DeploymentPresenterTest extends TestCase
     private function mockCommand($command_id, $optional = false)
     {
         $command = m::mock(Command::class);
-        $command->shouldReceive('getAttribute')->atLeast()->times(1)->with('optional')->andReturn($optional);
+        $command->shouldReceive('getAttribute')->atLeast()->once()->with('optional')->andReturn($optional);
 
         if ($optional) {
-            $command->shouldReceive('offsetExists')->atLeast()->times(1)->with('id')->andReturn(true);
-            $command->shouldReceive('offsetGet')->atLeast()->times(1)->with('id')->andReturn($command_id);
+            $command->shouldReceive('offsetExists')->atLeast()->once()->with('id')->andReturn(true);
+            $command->shouldReceive('offsetGet')->atLeast()->once()->with('id')->andReturn($command_id);
         }
 
         return $command;

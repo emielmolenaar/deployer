@@ -12,7 +12,7 @@ return [
     | any other location as required by the application or its packages.
     */
 
-    'name' => 'Deployer',
+    'name' => env('APP_NAME', 'Deployer'),
 
     /*
     |--------------------------------------------------------------------------
@@ -78,6 +78,7 @@ return [
     */
 
     'locale'       => env('APP_LOCALE', 'en'),
+
     'faker_locale' => 'en_GB',
 
     /*
@@ -167,20 +168,22 @@ return [
         /*
          * Package Service Providers...
          */
-        Laravel\Tinker\TinkerServiceProvider::class,
-        Creativeorange\Gravatar\GravatarServiceProvider::class,
-        Robbo\Presenter\PresenterServiceProvider::class,
-        Intervention\Image\ImageServiceProvider::class,
-        GrahamCampbell\Security\SecurityServiceProvider::class,
-        GrahamCampbell\Binput\BinputServiceProvider::class,
-        Tymon\JWTAuth\Providers\JWTAuthServiceProvider::class,
-        PragmaRX\Google2FA\Vendor\Laravel\ServiceProvider::class,
         BackupManager\Laravel\Laravel5ServiceProvider::class,
+        Creativeorange\Gravatar\GravatarServiceProvider::class,
         Fideloper\Proxy\TrustedProxyServiceProvider::class,
-        MicheleAngioni\MultiLanguage\MultiLanguageServiceProvider::class,
+        GrahamCampbell\Binput\BinputServiceProvider::class,
+        GrahamCampbell\Security\SecurityServiceProvider::class,
+        Intervention\Image\ImageServiceProvider::class,
+        Laracademy\Commands\MakeServiceProvider::class,
+        Laravel\Tinker\TinkerServiceProvider::class,
+        Lubusin\Decomposer\DecomposerServiceProvider::class,
+        McCool\LaravelAutoPresenter\AutoPresenterServiceProvider::class,
         MicheleAngioni\MultiLanguage\MultiLanguageBindServiceProvider::class,
-        NotificationChannels\Twilio\TwilioProvider::class,
+        MicheleAngioni\MultiLanguage\MultiLanguageServiceProvider::class,
         NotificationChannels\HipChat\HipChatServiceProvider::class,
+        NotificationChannels\Twilio\TwilioProvider::class,
+        PragmaRX\Google2FA\Vendor\Laravel\ServiceProvider::class,
+        Tymon\JWTAuth\Providers\JWTAuthServiceProvider::class,
 
         /*
          * Application Service Providers...

@@ -4,18 +4,17 @@ namespace REBELinBLUE\Deployer;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
-use REBELinBLUE\Deployer\Services\Scripts\Runner as Process;
+use McCool\LaravelAutoPresenter\HasPresenter;
 use REBELinBLUE\Deployer\Traits\BroadcastChanges;
 use REBELinBLUE\Deployer\Traits\ProjectRelations;
 use REBELinBLUE\Deployer\View\Presenters\ProjectPresenter;
-use Robbo\Presenter\PresentableInterface;
 use UnexpectedValueException;
 use Version\Compare as VersionCompare;
 
 /**
  * Project model.
  */
-class Project extends Model implements PresentableInterface
+class Project extends Model implements HasPresenter
 {
     use SoftDeletes, BroadcastChanges, ProjectRelations;
 
@@ -42,7 +41,7 @@ class Project extends Model implements PresentableInterface
     protected $hidden = ['private_key', 'created_at', 'deleted_at', 'updated_at', 'hash',
                          'updated_at', 'servers', 'commands', 'hash',
                          'group', 'servers', 'commands', 'heartbeats', 'checkUrls',
-                         'notifications', 'deployments', 'shareFiles', 'configFiles', ];
+                         'notifications', 'deployments', 'shareFiles', 'configFiles', 'is_mirroring', ];
 
     /**
      * Additional attributes to include in the JSON representation.
@@ -64,6 +63,7 @@ class Project extends Model implements PresentableInterface
         'builds_to_keep'     => 'integer',
         'allow_other_branch' => 'boolean',
         'include_dev'        => 'boolean',
+        'is_mirroring'       => 'boolean',
     ];
 
     /**
@@ -86,29 +86,6 @@ class Project extends Model implements PresentableInterface
      * @var array
      */
     protected $checkurlStatus = [];
-
-    /**
-     * Override the boot method to bind model event listeners.
-     */
-    public static function boot()
-    {
-        parent::boot();
-
-        // When  creating the model generate an SSH Key pair and a webhook hash
-        static::saving(function (Project $model) {
-            if (!array_key_exists('private_key', $model->attributes) || $model->private_key === '') {
-                $model->generateSSHKey();
-            }
-
-            if (!array_key_exists('public_key', $model->attributes) || $model->public_key === '') {
-                $model->regeneratePublicKey();
-            }
-
-            if (!array_key_exists('hash', $model->attributes)) {
-                $model->generateHash();
-            }
-        });
-    }
 
     /**
      * Determines whether the project is currently being deployed.
@@ -214,11 +191,11 @@ class Project extends Model implements PresentableInterface
     /**
      * Gets the view presenter.
      *
-     * @return ProjectPresenter
+     * @return string
      */
-    public function getPresenter()
+    public function getPresenterClass()
     {
-        return new ProjectPresenter($this);
+        return ProjectPresenter::class;
     }
 
     /**
@@ -451,61 +428,5 @@ class Project extends Model implements PresentableInterface
     public function refs()
     {
         return $this->hasMany(Ref::class);
-    }
-
-    /**
-     * Generates an SSH key and sets the private/public key properties.
-     */
-    protected function generateSSHKey()
-    {
-        /** @var \REBELinBLUE\Deployer\Services\Filesystem\Filesystem $filesystem */
-        $filesystem = app('files');
-
-        $private_key_file = $filesystem->tempnam(storage_path('app/tmp'), 'key');
-        $public_key_file  = $private_key_file . '.pub';
-
-        /** @var Process $process */
-        $process = app(Process::class);
-        $process->setScript('tools.GenerateSSHKey', [
-            'key_file' => $private_key_file,
-        ])->run();
-
-        if (!$process->isSuccessful()) {
-            throw new \RuntimeException($process->getErrorOutput());
-        }
-
-        $this->attributes['private_key'] = $filesystem->get($private_key_file);
-        $this->attributes['public_key']  = $filesystem->get($public_key_file);
-
-        $filesystem->delete([$private_key_file, $public_key_file]);
-    }
-
-    /**
-     * Generates an SSH key and sets the private/public key properties.
-     */
-    protected function regeneratePublicKey()
-    {
-        /** @var \REBELinBLUE\Deployer\Services\Filesystem\Filesystem $filesystem */
-        $filesystem = app('files');
-
-        $private_key_file = $filesystem->tempnam(storage_path('app/tmp'), 'key');
-        $public_key_file  = $private_key_file . '.pub';
-
-        $filesystem->put($private_key_file, $this->private_key);
-        $filesystem->chmod($private_key_file, 0600);
-
-        /** @var Process $process */
-        $process = app(Process::class);
-        $process->setScript('tools.RegeneratePublicSSHKey', [
-            'key_file' => $private_key_file,
-        ])->run();
-
-        if (!$process->isSuccessful()) {
-            throw new \RuntimeException($process->getErrorOutput());
-        }
-
-        $this->attributes['public_key'] = $filesystem->get($public_key_file);
-
-        $filesystem->delete([$private_key_file, $public_key_file]);
     }
 }

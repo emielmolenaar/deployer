@@ -2,15 +2,19 @@
 
 namespace REBELinBLUE\Deployer\Console\Commands;
 
-use DateTimeZone;
 use Illuminate\Config\Repository as ConfigRepository;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Redis;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Contracts\Validation\Factory as ValidationFactory;
+use MicheleAngioni\MultiLanguage\LanguageManager;
 use PDO;
+use REBELinBLUE\Deployer\Console\Commands\Installer\EnvFile;
+use REBELinBLUE\Deployer\Console\Commands\Installer\Requirements;
 use REBELinBLUE\Deployer\Console\Commands\Traits\AskAndValidate;
-use Symfony\Component\Console\Helper\FormatterHelper;
+use REBELinBLUE\Deployer\Console\Commands\Traits\GetAvailableOptions;
+use REBELinBLUE\Deployer\Console\Commands\Traits\OutputStyles;
+use REBELinBLUE\Deployer\Services\Filesystem\Filesystem;
+use REBELinBLUE\Deployer\Services\Token\TokenGeneratorInterface;
+use RuntimeException;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Process\ProcessBuilder;
 
@@ -19,7 +23,7 @@ use Symfony\Component\Process\ProcessBuilder;
  */
 class InstallApp extends Command
 {
-    use AskAndValidate;
+    use AskAndValidate, OutputStyles, GetAvailableOptions;
 
     /**
      * The name and signature of the console command.
@@ -38,69 +42,111 @@ class InstallApp extends Command
     /**
      * @var ConfigRepository
      */
-    private $config;
+    protected $config;
+
+    /**
+     * @var Filesystem
+     */
+    protected $filesystem;
+
+    /**
+     * @var TokenGeneratorInterface
+     */
+    private $tokenGenerator;
+
+    /**
+     * @var ProcessBuilder
+     */
+    private $builder;
+
+    /**
+     * @var ValidationFactory
+     */
+    private $validator;
+
+    /**
+     * @var LanguageManager
+     */
+    private $manager;
 
     /**
      * InstallApp constructor.
      *
-     * @param ConfigRepository $config
+     * @param ConfigRepository        $config
+     * @param Filesystem              $filesystem
+     * @param TokenGeneratorInterface $tokenGenerator
+     * @param ProcessBuilder          $builder
+     * @param ValidationFactory       $validator
+     * @param LanguageManager         $manager
      */
-    public function __construct(ConfigRepository $config = null)
-    {
+    public function __construct(
+        ConfigRepository $config,
+        Filesystem $filesystem,
+        TokenGeneratorInterface $tokenGenerator,
+        ProcessBuilder $builder,
+        ValidationFactory $validator,
+        LanguageManager $manager
+    ) {
         parent::__construct();
 
-        $this->config = $config;
+        $this->config         = $config;
+        $this->filesystem     = $filesystem;
+        $this->tokenGenerator = $tokenGenerator;
+        $this->builder        = $builder;
+        $this->validator      = $validator;
+        $this->manager        = $manager;
     }
 
     /**
      * Execute the console command.
      *
+     * @param  EnvFile      $writer
+     * @param  Requirements $requirements
      * @return mixed
      */
-    public function handle()
+    public function handle(EnvFile $writer, Requirements $requirements)
     {
-        if (!$this->verifyNotInstalled()) {
+        $this->line('');
+
+        $config = base_path('.env');
+
+        if (!$this->filesystem->exists($config)) {
+            $this->filesystem->copy(base_path('.env.dist'), $config);
+            $this->config->set('app.key', 'SomeRandomString');
+        }
+
+        if (!$this->verifyNotInstalled() || !$requirements->check($this)) {
             return -1;
         }
 
         $this->clearCaches();
 
-        $config = base_path('.env');
-
-        if (!file_exists($config)) {
-            copy(base_path('.env.example'), $config);
-            $this->config->set('app.key', 'SomeRandomString');
-        }
-
+        $this->block(' -- Welcome to Deployer -- ', 'fg=white;bg=green;options=bold');
         $this->line('');
-        $this->block(' -- Welcome to Deployer -- ', 'fg=black;bg=green;options=bold');
-        $this->line('');
-
-        if (!$this->checkRequirements()) {
-            return -1;
-        }
 
         $this->line('Please answer the following questions:');
         $this->line('');
 
-        $config = [
+        $config = $this->restructureConfig([
             'db'      => $this->getDatabaseInformation(),
             'app'     => $this->getInstallInformation(),
             'hipchat' => $this->getHipchatInformation(),
             'twilio'  => $this->getTwilioInformation(),
             'mail'    => $this->getEmailInformation(),
-        ];
+            'jwt'     => [],
+        ]);
 
         $admin = $this->getAdminInformation();
 
         $config['jwt']['secret'] = $this->generateJWTKey();
 
-        $this->writeEnvFile($config);
+        $this->info('Writing configuration file');
+        $writer->save($config);
 
         $this->info('Generating JWT key');
         $this->generateKey();
-        $this->migrate();
 
+        $this->migrate();
         $this->createAdminUser($admin['name'], $admin['email'], $admin['password']);
 
         $this->clearCaches();
@@ -131,6 +177,120 @@ class InstallApp extends Command
             $this->comment($instruction);
             $this->line('');
         }
+
+        return 0;
+    }
+
+    /**
+     * Generates a key for JWT.
+     *
+     * @return string
+     */
+    protected function generateJWTKey()
+    {
+        return $this->tokenGenerator->generateRandom(32);
+    }
+
+    /**
+     * Calls the artisan migrate to set up the database.
+     */
+    protected function migrate()
+    {
+        $this->info('Running database migrations');
+        $this->line('');
+
+        $process = $this->artisanProcess('migrate', ['--force']);
+
+        $process->run(function ($type, $buffer) {
+            $buffer = trim($buffer);
+            if (empty($buffer)) {
+                return;
+            }
+
+            if ($type === Process::OUT) {
+                $this->line($buffer);
+            } else {
+                $this->error($buffer);
+            }
+        });
+
+        if (!$process->isSuccessful()) {
+            throw new RuntimeException($process->getErrorOutput());
+        }
+
+        $this->line('');
+    }
+
+    /**
+     * Clears all Laravel caches.
+     */
+    protected function clearCaches()
+    {
+        $this->callSilent('clear-compiled');
+        $this->callSilent('cache:clear');
+        $this->callSilent('route:clear');
+        $this->callSilent('config:clear');
+        $this->callSilent('view:clear');
+    }
+
+    /**
+     * Runs the artisan optimize commands.
+     */
+    protected function optimize()
+    {
+        if (!$this->laravel->environment('local')) {
+            $this->call('optimize', ['--force' => true]);
+            $this->call('config:cache');
+            $this->call('route:cache');
+        }
+    }
+
+    /**
+     * Validates the answer is a URL.
+     *
+     * @param string $answer
+     *
+     * @return mixed
+     */
+    protected function validateUrl($answer)
+    {
+        $validator = $this->validator->make(['url' => $answer], [
+            'url' => 'url',
+        ]);
+
+        if (!$validator->passes()) {
+            throw new RuntimeException($validator->errors()->first('url'));
+        }
+
+        return preg_replace('#/$#', '', $answer);
+    }
+
+    /**
+     * Change the configuration array generated by the prompt so it matches the config file.
+     *
+     * @param array $config
+     *
+     * @return array
+     */
+    private function restructureConfig(array $config)
+    {
+        // Move the socket value to the correct key
+        if (isset($config['app']['socket'])) {
+            $config['socket']['url'] = $config['app']['socket'];
+            unset($config['app']['socket']);
+        }
+
+        if (isset($config['app']['ssl'])) {
+            foreach ($config['app']['ssl'] as $key => $value) {
+                $config['socket']['ssl_' . $key] = $value;
+            }
+
+            unset($config['app']['ssl']);
+        }
+
+        ksort($config);
+
+        return $config;
     }
 
     /**
@@ -138,7 +298,7 @@ class InstallApp extends Command
      *
      * @return array
      */
-    public function getTwilioInformation()
+    private function getTwilioInformation()
     {
         $this->header('Twilio setup');
 
@@ -162,7 +322,7 @@ class InstallApp extends Command
      *
      * @return array
      */
-    public function getHipchatInformation()
+    private function getHipchatInformation()
     {
         $this->header('Hipchat setup');
 
@@ -183,347 +343,6 @@ class InstallApp extends Command
     }
 
     /**
-     * Writes the configuration data to the config file.
-     *
-     * @param array $input The config data to write
-     *
-     * @return bool
-     */
-    protected function writeEnvFile(array $input)
-    {
-        $this->info('Writing configuration file');
-
-        $path   = base_path('.env');
-        $config = file_get_contents($path);
-
-        // Move the socket value to the correct key
-        if (isset($input['app']['socket'])) {
-            $input['socket']['url'] = $input['app']['socket'];
-            unset($input['app']['socket']);
-        }
-
-        if (isset($input['app']['ssl'])) {
-            foreach ($input['app']['ssl'] as $key => $value) {
-                $input['socket']['ssl_' . $key] = $value;
-            }
-
-            unset($input['app']['ssl']);
-        }
-
-        foreach ($input as $section => $data) {
-            foreach ($data as $key => $value) {
-                $env = strtoupper($section . '_' . $key);
-
-                $config = preg_replace('/' . $env . '=(.*)/', $env . '=' . $value, $config);
-            }
-        }
-
-        // Remove SSL certificate keys if not using HTTPS
-        if (substr($input['socket']['url'], 0, 5) !== 'https') {
-            foreach (['key', 'cert', 'ca'] as $key) {
-                $key = strtoupper($key);
-
-                $config = preg_replace('/SOCKET_SSL_' . $key . '_FILE=(.*)[\n]/', '', $config);
-            }
-
-            $config = preg_replace('/SOCKET_SSL_KEY_PASSPHRASE=(.*)[\n]/', '', $config);
-        }
-
-        // Remove keys not needed for sqlite
-        if ($input['db']['connection'] === 'sqlite') {
-            foreach (['host', 'database', 'username', 'password'] as $key) {
-                $key = strtoupper($key);
-
-                $config = preg_replace('/DB_' . $key . '=(.*)[\n]/', '', $config);
-            }
-        }
-
-        // Remove keys not needed by SMTP
-        if ($input['mail']['driver'] !== 'smtp') {
-            foreach (['host', 'port', 'username', 'password'] as $key) {
-                $key = strtoupper($key);
-
-                $config = preg_replace('/MAIL_' . $key . '=(.*)[\n]/', '', $config);
-            }
-        }
-
-        // Remove redis password if null
-        $config = preg_replace('/REDIS_PASSWORD=null[\n]/', '', $config);
-
-        // Remove github keys if not needed, only really exists on my dev copy
-        if (!isset($input['github']) || empty($input['github']['oauth_token'])) {
-            $config = preg_replace('/GITHUB_OAUTH_TOKEN=(.*)[\n]/', '', $config);
-        }
-
-        // Remove trusted_proxies if not set
-        if (!isset($input['trusted']) || !isset($input['trusted']['proxied'])) {
-            $config = preg_replace('/TRUSTED_PROXIES=(.*)[\n]/', '', $config);
-        }
-
-        // Remove comments
-        $config = preg_replace('/#(.*)[\n]/', '', $config);
-        $config = preg_replace('/[\n]{3,}/m', PHP_EOL . PHP_EOL, $config);
-
-        return file_put_contents($path, trim($config) . PHP_EOL);
-    }
-
-    /**
-     * Generates a key for JWT.
-     *
-     * @return string
-     */
-    protected function generateJWTKey()
-    {
-        return str_random(32);
-    }
-
-    /**
-     * Calls the artisan migrate to set up the database.
-     */
-    protected function migrate()
-    {
-        $this->info('Running database migrations');
-        $this->line('');
-
-        $builder = new ProcessBuilder();
-        $builder->setPrefix('php');
-
-        // Something has changed in laravel 5.3 which means calling the migrate command with call() isn't working
-        $process = $builder->setArguments([
-            base_path('artisan'), 'migrate', '--force',
-        ])->setWorkingDirectory(base_path('artisan'))
-          ->getProcess()
-          ->setTty(true)
-          ->setTimeout(null);
-
-        $process->run(function ($type, $buffer) {
-            if ($type === Process::OUT) {
-                echo $buffer;
-            }
-        });
-
-        if (!$process->isSuccessful()) {
-            throw new \RuntimeException($process);
-        }
-
-        $this->line('');
-    }
-
-    /**
-     * Clears all Laravel caches.
-     * @param bool $silent
-     */
-    protected function clearCaches($silent = true)
-    {
-        $this->callCommand('clear-compiled', [], $silent);
-        $this->callCommand('cache:clear', [], $silent);
-        $this->callCommand('route:clear', [], $silent);
-        $this->callCommand('config:clear', [], $silent);
-        $this->callCommand('view:clear', [], $silent);
-    }
-
-    /**
-     * Runs the artisan optimize commands.
-     */
-    protected function optimize()
-    {
-        if ($this->getLaravel()->environment() !== 'local') {
-            $this->call('optimize', ['--force' => true]);
-            $this->call('config:cache');
-            $this->call('route:cache');
-        }
-    }
-
-    /**
-     * Checks the system meets all the requirements needed to run Deployer.
-     *
-     * @return bool
-     */
-    protected function checkRequirements()
-    {
-        $errors = false;
-
-        // Check PHP version:
-        if (!version_compare(PHP_VERSION, '5.6.4', '>=')) {
-            $this->error('PHP 5.6.4 or higher is required');
-            $errors = true;
-        }
-
-        // Check for required PHP extensions
-        $required_extensions = ['PDO', 'curl', 'gd', 'json',
-                                'tokenizer', 'openssl', 'mbstring',
-                               ];
-
-        foreach ($required_extensions as $extension) {
-            if (!extension_loaded($extension)) {
-                $this->error('Extension required: ' . $extension);
-                $errors = true;
-            }
-        }
-
-        if (!count($this->getDatabaseDrivers())) {
-            $this->error(
-                'At least 1 PDO driver is required. Either sqlite, mysql or pgsql, check your php.ini file'
-            );
-            $errors = true;
-        }
-
-        // Functions needed by symfony process
-        $required_functions = ['proc_open'];
-
-        foreach ($required_functions as $function) {
-            if (!function_exists($function)) {
-                $this->error('Function required: ' . $function . '. Is it disabled in php.ini?');
-                $errors = true;
-            }
-        }
-
-        // Programs needed in $PATH
-        $required_commands = ['ssh', 'ssh-keygen', 'git', 'scp', 'tar', 'gzip', 'rsync', 'bash', 'php'];
-
-        foreach ($required_commands as $command) {
-            $process = new Process('which ' . $command);
-            $process->setTimeout(null);
-            $process->run();
-
-            if (!$process->isSuccessful()) {
-                $this->error('Program not found in path: ' . $command);
-                $errors = true;
-            }
-        }
-
-        $required_one = ['node', 'nodejs'];
-        $found        = false;
-        foreach ($required_one as $command) {
-            $process = new Process('which ' . $command);
-            $process->setTimeout(null);
-            $process->run();
-
-            if ($process->isSuccessful()) {
-                $found = true;
-                break;
-            }
-        }
-
-        if (!$found) {
-            $this->error('node.js was not found');
-            $errors = true;
-        }
-
-        // Files and directories which need to be writable
-        $writable = ['.env', 'storage', 'storage/logs', 'storage/app', 'storage/app/mirrors', 'storage/app/tmp',
-                     'storage/app/public', 'storage/framework', 'storage/framework/cache',
-                     'storage/framework/sessions', 'storage/framework/views', 'bootstrap/cache',
-                    ];
-
-        foreach ($writable as $path) {
-            if (!is_writable(base_path($path))) {
-                $this->error($path . ' is not writable');
-                $errors = true;
-            }
-        }
-
-        // Check that redis is running
-        try {
-            Redis::connection()->ping();
-        } catch (\Exception $e) {
-            $this->error('Redis is not running');
-            $errors = true;
-        }
-
-        if (config('queue.default') === 'beanstalkd') {
-            $connected = Queue::connection()->getPheanstalk()
-                                            ->getConnection()
-                                            ->isServiceListening();
-
-            if (!$connected) {
-                $this->error('Beanstalkd is not running');
-                $errors = true;
-            }
-        }
-
-        if ($errors) {
-            $this->line('');
-            $this->block('Deployer cannot be installed. Please review the errors above before continuing.');
-            $this->line('');
-
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
-     * A wrapper around symfony's formatter helper to output a block.
-     *
-     * @param string|array $messages Messages to output
-     * @param string       $type     The type of message to output
-     */
-    protected function block($messages, $type = 'error')
-    {
-        $output = [];
-
-        if (!is_array($messages)) {
-            $messages = (array) $messages;
-        }
-
-        foreach ($messages as $message) {
-            $output[] = trim($message);
-        }
-
-        $formatter = new FormatterHelper();
-        $this->line($formatter->formatBlock($output, $type, true));
-    }
-
-    /**
-     * Outputs a header block.
-     *
-     * @param string $header The text to output
-     */
-    protected function header($header)
-    {
-        $this->block($header, 'question');
-    }
-
-    /**
-     * Calls an artisan command and optionally silences the output.
-     *
-     * @param string $command
-     * @param array  $arguments
-     * @param bool   $silent
-     */
-    protected function callCommand($command, array $arguments = [], $silent = false)
-    {
-        if ($silent) {
-            $this->callSilent($command, $arguments);
-
-            return;
-        }
-
-        $this->call($command, $arguments);
-    }
-
-    /**
-     * Validates the answer is a URL.
-     *
-     * @param string $answer
-     *
-     * @return mixed
-     */
-    protected function validateUrl($answer)
-    {
-        $validator = Validator::make(['url' => $answer], [
-            'url' => 'url',
-        ]);
-
-        if (!$validator->passes()) {
-            throw new \RuntimeException($validator->errors()->first('url'));
-        }
-
-        return preg_replace('#/$#', '', $answer);
-    }
-
-    /**
      * Calls the artisan key:generate to set the APP_KEY.
      */
     private function generateKey()
@@ -541,20 +360,36 @@ class InstallApp extends Command
      */
     private function createAdminUser($name, $email, $password)
     {
-        $builder = new ProcessBuilder();
-        $builder->setPrefix('php');
-
-        $process = $builder->setArguments([
-            base_path('artisan'), 'deployer:create-user', $name, $email, $password, '--no-email',
-        ])->setWorkingDirectory(base_path('artisan'))
-          ->getProcess()
-          ->setTimeout(null);
+        $process = $this->artisanProcess('deployer:create-user', [$name, $email, $password, '--no-email']);
 
         $process->run();
 
         if (!$process->isSuccessful()) {
-            throw new \RuntimeException($process);
+            throw new RuntimeException($process->getErrorOutput());
         }
+    }
+
+    /**
+     * Generates a Symfony Process instance for an artisan command.
+     *
+     * @param string $command
+     * @param array  $args
+     *
+     * @return \Symfony\Component\Process\Process
+     */
+    private function artisanProcess($command, array $args = [])
+    {
+        $arguments = array_merge([
+            base_path('artisan'),
+            $command,
+        ], $args, ['--ansi']);
+
+        $this->builder->setPrefix('php');
+
+        return $this->builder->setArguments($arguments)
+                             ->setWorkingDirectory(base_path())
+                             ->getProcess()
+                             ->setTimeout(null);
     }
 
     /**
@@ -591,7 +426,9 @@ class InstallApp extends Command
                 $database['password'] = $pass;
             }
 
-            $connectionVerified = $this->verifyDatabaseDetails($database);
+            $connectionVerified = true;
+
+            //$connectionVerified = $this->verifyDatabaseDetails($database);
         }
 
         return $database;
@@ -607,7 +444,7 @@ class InstallApp extends Command
         $this->header('Installation details');
 
         $regions = $this->getTimezoneRegions();
-        $locales = $this->getLocales();
+        $locales = $this->manager->getAvailableLanguages();
 
         $url_callback = function ($answer) {
             return $this->validateUrl($answer);
@@ -627,8 +464,14 @@ class InstallApp extends Command
         // If the URL doesn't have : in twice (the first is in the protocol, the second for the port)
         if (substr_count($socket, ':') === 1) {
             // Check if running on nginx, and if not then add it
-            $process = new Process('which nginx');
-            $process->setTimeout(null);
+            $this->builder->setPrefix('which');
+
+            // Something has changed in laravel 5.3 which means calling the migrate command with call() isn't working
+            $process = $this->builder->setArguments(['nginx'])
+                                     ->setWorkingDirectory(base_path())
+                                     ->getProcess()
+                                     ->setTimeout(null);
+
             $process->run();
 
             if (!$process->isSuccessful()) {
@@ -637,16 +480,16 @@ class InstallApp extends Command
         }
 
         $path_callback = function ($answer) {
-            $validator = Validator::make(['path' => $answer], [
+            $validator = $this->validator->make(['path' => $answer], [
                 'path' => 'required',
             ]);
 
             if (!$validator->passes()) {
-                throw new \RuntimeException($validator->errors()->first('path'));
+                throw new RuntimeException($validator->errors()->first('path'));
             }
 
-            if (!file_exists($answer)) {
-                throw new \RuntimeException('File does not exist');
+            if (!$this->filesystem->exists($answer)) {
+                throw new RuntimeException('File does not exist');
             }
 
             return $answer;
@@ -696,12 +539,12 @@ class InstallApp extends Command
             $host = $this->ask('Host', 'localhost');
 
             $port = $this->askAndValidate('Port', [], function ($answer) {
-                $validator = Validator::make(['port' => $answer], [
+                $validator = $this->validator->make(['port' => $answer], [
                     'port' => 'integer',
                 ]);
 
                 if (!$validator->passes()) {
-                    throw new \RuntimeException($validator->errors()->first('port'));
+                    throw new RuntimeException($validator->errors()->first('port'));
                 }
 
                 return $answer;
@@ -719,12 +562,12 @@ class InstallApp extends Command
         $from_name = $this->ask('From name', 'Deployer');
 
         $from_address = $this->askAndValidate('From address', [], function ($answer) {
-            $validator = Validator::make(['from_address' => $answer], [
+            $validator = $this->validator->make(['from_address' => $answer], [
                 'from_address' => 'email',
             ]);
 
             if (!$validator->passes()) {
-                throw new \RuntimeException($validator->errors()->first('from_address'));
+                throw new RuntimeException($validator->errors()->first('from_address'));
             }
 
             return $answer;
@@ -749,24 +592,24 @@ class InstallApp extends Command
         $name = $this->ask('Name', 'Admin');
 
         $email_address = $this->askAndValidate('Email address', [], function ($answer) {
-            $validator = Validator::make(['email_address' => $answer], [
+            $validator = $this->validator->make(['email_address' => $answer], [
                 'email_address' => 'email',
             ]);
 
             if (!$validator->passes()) {
-                throw new \RuntimeException($validator->errors()->first('email_address'));
+                throw new RuntimeException($validator->errors()->first('email_address'));
             }
 
             return $answer;
         });
 
         $password = $this->askSecretAndValidate('Password', [], function ($answer) {
-            $validator = Validator::make(['password' => $answer], [
+            $validator = $this->validator->make(['password' => $answer], [
                 'password' => 'min:6',
             ]);
 
             if (!$validator->passes()) {
-                throw new \RuntimeException($validator->errors()->first('password'));
+                throw new RuntimeException($validator->errors()->first('password'));
             }
 
             return $answer;
@@ -789,7 +632,7 @@ class InstallApp extends Command
     private function verifyDatabaseDetails(array $database)
     {
         if ($database['connection'] === 'sqlite') {
-            return touch(database_path('database.sqlite'));
+            return $this->filesystem->touch(database_path('database.sqlite'));
         }
 
         try {
@@ -812,11 +655,10 @@ class InstallApp extends Command
 
             return true;
         } catch (\Exception $error) {
-            $this->block([
+            $this->failure(
                 'Deployer could not connect to the database with the details provided. Please try again.',
-                PHP_EOL,
-                $error->getMessage(),
-            ]);
+                $error->getMessage()
+            );
         }
 
         return false;
@@ -829,81 +671,15 @@ class InstallApp extends Command
      */
     private function verifyNotInstalled()
     {
-        if (config('app.key') !== false && config('app.key') !== 'SomeRandomString') {
-            $this->block([
+        if ($this->config->get('app.key') !== false && $this->config->get('app.key') !== 'SomeRandomString') {
+            $this->failure(
                 'You have already installed Deployer!',
-                PHP_EOL,
-                'If you were trying to update Deployer, please use "php artisan app:update" instead.',
-            ]);
+                'If you were trying to update Deployer, please use "php artisan app:update" instead.'
+            );
 
             return false;
         }
 
         return true;
-    }
-
-    /**
-     * Gets an array of available PDO drivers which are supported by Laravel.
-     *
-     * @return array
-     */
-    private function getDatabaseDrivers()
-    {
-        $available = collect(PDO::getAvailableDrivers());
-
-        return array_values($available->intersect(['mysql', 'pgsql', 'sqlite'])->all());
-    }
-
-    /**
-     * Gets a list of timezone regions.
-     *
-     * @return array
-     */
-    private function getTimezoneRegions()
-    {
-        return [
-            'UTC'        => DateTimeZone::UTC,
-            'Africa'     => DateTimeZone::AFRICA,
-            'America'    => DateTimeZone::AMERICA,
-            'Antarctica' => DateTimeZone::ANTARCTICA,
-            'Asia'       => DateTimeZone::ASIA,
-            'Atlantic'   => DateTimeZone::ATLANTIC,
-            'Australia'  => DateTimeZone::AUSTRALIA,
-            'Europe'     => DateTimeZone::EUROPE,
-            'Indian'     => DateTimeZone::INDIAN,
-            'Pacific'    => DateTimeZone::PACIFIC,
-        ];
-    }
-
-    /**
-     * Gets a list of available locations in the supplied region.
-     *
-     * @param int $region The region constant
-     *
-     * @return array
-     *
-     * @see DateTimeZone
-     */
-    private function getTimezoneLocations($region)
-    {
-        $locations = [];
-
-        foreach (DateTimeZone::listIdentifiers($region) as $timezone) {
-            $locations[] = substr($timezone, strpos($timezone, '/') + 1);
-        }
-
-        return $locations;
-    }
-
-    /**
-     * Gets a list of the available locales.
-     *
-     * @return array
-     */
-    private function getLocales()
-    {
-        $manager = resolve('locale');
-
-        return $manager->getAvailableLanguages();
     }
 }

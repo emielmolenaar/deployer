@@ -4,14 +4,17 @@ namespace REBELinBLUE\Deployer\Tests\Unit\Providers;
 
 use Illuminate\Contracts\Config\Repository as Config;
 use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Http\Request;
 use Mockery as m;
 use REBELinBLUE\Deployer\Providers\WhoopsServiceProvider;
 use REBELinBLUE\Deployer\Tests\TestCase;
+use Whoops\Handler\JsonResponseHandler;
+use Whoops\Handler\PrettyPageHandler;
 use Whoops\Run as Whoops;
 
 /**
  * @coversDefaultClass \REBELinBLUE\Deployer\Providers\WhoopsServiceProvider
- * @todp This the binding
+ * @todp Test that the correct type of response is returned
  */
 class WhoopsServiceProviderTest extends TestCase
 {
@@ -87,5 +90,45 @@ class WhoopsServiceProviderTest extends TestCase
         $actual = $whoops->provides();
 
         $this->assertSame([], $actual);
+    }
+
+    /**
+     * @covers ::register
+     */
+    public function testRegisterIsExpectedTypes()
+    {
+        $this->assertInstanceOf(Whoops::class, $this->app->make(Whoops::class));
+    }
+
+    /**
+     * @covers ::register
+     */
+    public function testRegisterPrettyPrintPageHandler()
+    {
+        $request = m::mock(Request::class);
+        $request->shouldReceive('expectsJson')->andReturn(false);
+
+        $this->app->instance(Request::class, $request);
+
+        $handlers = $this->app->make(Whoops::class)->getHandlers();
+
+        $this->assertCount(1, $handlers);
+        $this->assertInstanceOf(PrettyPageHandler::class, $handlers[0]);
+    }
+
+    /**
+     * @covers ::register
+     */
+    public function testRegisterJsonResponseHandler()
+    {
+        $request = m::mock(Request::class);
+        $request->shouldReceive('expectsJson')->andReturn(true);
+
+        $this->app->instance(Request::class, $request);
+
+        $handlers = $this->app->make(Whoops::class)->getHandlers();
+
+        $this->assertCount(1, $handlers);
+        $this->assertInstanceOf(JsonResponseHandler::class, $handlers[0]);
     }
 }

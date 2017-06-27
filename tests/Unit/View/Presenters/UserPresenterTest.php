@@ -14,6 +14,7 @@ use REBELinBLUE\Deployer\View\Presenters\UserPresenter;
 class UserPresenterTest extends TestCase
 {
     /**
+     * @covers ::__construct
      * @covers ::presentAvatarUrl
      */
     public function testPresentAvatarUrlReturnsUploadedAvatar()
@@ -21,18 +22,20 @@ class UserPresenterTest extends TestCase
         $expected = 'image.jpg';
 
         $user = m::mock(User::class);
-        $user->shouldReceive('getAttribute')->atLeast()->times(1)->with('avatar')->andReturn($expected);
+        $user->shouldReceive('getAttribute')->atLeast()->once()->with('avatar')->andReturn($expected);
 
         $gravatar = m::mock(Gravatar::class);
         $gravatar->shouldNotReceive('get');
 
-        $presenter = new UserPresenter($user, $gravatar);
-        $actual    = $presenter->presentAvatarUrl();
+        $presenter = new UserPresenter($gravatar);
+        $presenter->setWrappedObject($user);
+        $actual    = $presenter->avatar_url;
 
         $this->assertSame(config('app.url') . '/' . $expected, $actual);
     }
 
     /**
+     * @covers ::__construct
      * @covers ::presentAvatarUrl
      */
     public function testPresentAvatarDefaultsToGravatar()
@@ -45,10 +48,11 @@ class UserPresenterTest extends TestCase
 
         $user = m::mock(User::class);
         $user->shouldReceive('getAttribute')->once()->with('avatar')->andReturn(false);
-        $user->shouldReceive('getAttribute')->atLeast()->times(1)->with('email')->andReturn($email);
+        $user->shouldReceive('getAttribute')->atLeast()->once()->with('email')->andReturn($email);
 
-        $presenter = new UserPresenter($user, $gravatar);
-        $actual    = $presenter->presentAvatarUrl();
+        $presenter = new UserPresenter($gravatar);
+        $presenter->setWrappedObject($user);
+        $actual    = $presenter->avatar_url;
 
         $this->assertSame($expected, $actual);
     }

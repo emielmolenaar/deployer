@@ -2,7 +2,6 @@
 
 namespace REBELinBLUE\Deployer\View\Presenters;
 
-use Illuminate\Support\Facades\Lang;
 use RuntimeException;
 
 /**
@@ -18,11 +17,13 @@ trait RuntimePresenter
      */
     public function presentReadableRuntime()
     {
-        if (!$this->getObject() instanceof RuntimeInterface) {
-            throw new RuntimeException('Model must implement RuntimeInterface');
+        if (!$this->getWrappedObject() instanceof RuntimeInterface) {
+            throw new RuntimeException(
+                'Model ' . get_class($this->getWrappedObject()) . ' must implement RuntimeInterface'
+            );
         }
 
-        $seconds = $this->getObject()->runtime();
+        $seconds = $this->getWrappedObject()->runtime();
 
         $units = [
             'hour'   => 3600,
@@ -31,18 +32,18 @@ trait RuntimePresenter
         ];
 
         if ($seconds === 0) {
-            return Lang::choice('deployments.second', 0, ['time' => 0]);
+            return $this->translator->choice('deployments.second', 0, ['time' => 0]);
         }
 
         // If the runtime is more than 3 hours show a simple message
         if ($seconds >= $units['hour'] * 3) {
-            return Lang::get('deployments.very_long_time');
+            return $this->translator->trans('deployments.very_long_time');
         }
 
         $readable = '';
         foreach ($units as $name => $divisor) {
             if ($quot = (int) ($seconds / $divisor)) {
-                $readable .= Lang::choice('deployments.' . $name, $quot, ['time' => $quot]) . ', ';
+                $readable .= $this->translator->choice('deployments.' . $name, $quot, ['time' => $quot]) . ', ';
                 $seconds -= $quot * $divisor;
             }
         }
